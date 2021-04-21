@@ -1,26 +1,23 @@
-# How it works
-# query https://esgf-data.dkrz.de/esg-search/search/?offset=0&limit=100&type=Dataset&replica=false&latest=true&activity_id=CMIP&variable_id=pr%2Cta%2Ctasmax%2Ctasmin&mip_era=CMIP6&institution_id=BCC&frequency=day&experiment_id=historical&activity_id%21=input4MIPs&source_id=BCC-CSM2-MR&facets=mip_era%2Cactivity_id%2Cmodel_cohort%2Cproduct%2Csource_id%2Cinstitution_id%2Csource_type%2Cnominal_resolution%2Cexperiment_id%2Csub_experiment_id%2Cvariant_label%2Cgrid_label%2Ctable_id%2Cfrequency%2Crealm%2Cvariable_id%2Ccf_standard_name%2Cdata_node&format=application%2Fsolr%2Bjson
-# pagination or increase the limit to 500 or more
-# from the JSON output, capture xlink second item starting with http://hdl.handle.net/ 
-# go to the http://hdl.handle.net/... page and look for http://...*.nc$ files
-# most likely multiple download options are available ---> create a database of all relevant information
-# all files https://esgf3.dkrz.de/thredds/catalog/esgcet/catalog.html
+# -------------------------------------------------- #
+# CMIP6 data search
+# A. Ghosh, R. Hijmans
+# -------------------------------------------------- #
 
-# Functions
-# First search all results with few parameters
-# complete list of search parameters are following
-# TODO: function to provide more details/ validity of each parameter
+library(xml2)
+library(httr)
+library(tidyverse)
 
 findMetaCMIP6 <- function(...){
   
   # check validity of args supplied
   dots <- list(...)
+  
   args <- names(dots)
   # args <- c("project", "activity_id", names(dots))
   
   # work in progress: not the final list 
   argsList <- c("offset","limit","activity_id","model_cohort","product","source_id",
-                "institution_id","source_type","nominal_resolution","experiment_id",
+                "institution_id","member_id","source_type","nominal_resolution","experiment_id",
                 "sub_experiment_id","variant_label","grid_label","table_id","frequency",
                 "realm","variable_id","cf_standard_name","data_node","project", "mip_era")
   
@@ -84,16 +81,11 @@ getURLs <- function(d) {
 
 
 getMetaCMIP6 <- function(...) {
-  dd <- list()
-  for (i in 1:5){
-    cat("Parsing page ", i, "-----------------\n"); flush.console()
-    offset <- (i-1)*10000 # 10000 is the maximum limit in one query
-    limit <- offset+10000
-    d <- try(findMetaCMIP6(offset = offset, limit = limit, ...))
-    if (is.null(nrow(d))) break
-    dd[[i]] <- d
-  }
-  xdd <- data.table::rbindlist(dd, fill = TRUE)
+  
+  # cat("Parsing page ", i, "-----------------\n"); flush.console()
+  # 10000 is the maximum limit in one query
+  xdd <- try(findMetaCMIP6(...))
+  
   ldd <- getURLs(xdd)
   sdd <- data.table::rbindlist(ldd, fill = TRUE)
   names(sdd)[names(sdd) == 'size.1'] <- 'file_size'
@@ -109,7 +101,7 @@ getMetaCMIP6 <- function(...) {
               "frequency","index_node","institution_id","member_id","mip_era","file_name", "file_url",
               "nominal_resolution","file_start_date","file_end_date","number_of_aggregations",
               "number_of_files","pid","project","source_id","source_type","sub_experiment_id", 
-              "url","xlink","realm","replica","latest","geo","geo_units","grid","mod_time", "checksum","checksum_type",
+              "url","xlink","realm","replica","latest","geo","geo_units","grid","mod_time", "file_size" ,"checksum","checksum_type",
               "grid_label","data_specs_version","tracking_id","citation_url", "further_info_url", "retracted")
   sdd <- sdd[, ..tokeep]
   return(sdd)
@@ -152,3 +144,27 @@ getDataCMIP6 <- function(d, downdir, silent=FALSE){
   # alternate
   # curl::curl_fetch_disk(fileurl, file.path(localdir, dataset))
 }
+
+
+##########################################################################################
+checkDownloadStatus <- function(i, idx, downdir){
+  d <- idx[i,]
+  
+  d$download_status <- "FAIL"
+  d$localfilechek <- "FAIL"
+  
+  # localfile exists?
+  # fstr <- strsplit(d$file_url, "/CMIP6/|/cmip6/|/cmip6_data/")[[1]][2]
+  flocal <- file.path(downdir, basename(d$file_url))
+  d$localfile <- flocal
+  
+  localfilecheck <- file.size(flocal) >= d$file_size  
+  
+  if(file.exists(flocal) & localfilecheck){
+    d$download_status <- "PASS"
+    d$localfilecheck <- "PASS"
+  }
+  return(d)
+}
+
+
