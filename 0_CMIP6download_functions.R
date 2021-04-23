@@ -75,7 +75,7 @@ getURLs <- function(d) {
     ds <- d[i,]
     # read XML metadata
     ur <- unlist(ds$url)[1]
-    stopifnot (length(u) > 0)
+    stopifnot (length(ur) > 0)
     u <- try(xml2::read_html(ur), silent = TRUE) 
     # if xml content is missing
     if (inherits(u, "try-error")) {
