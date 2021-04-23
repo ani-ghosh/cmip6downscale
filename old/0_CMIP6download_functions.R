@@ -5,27 +5,12 @@
 
 library(xml2)
 library(httr)
+library(tidyverse)
 
-# helper function to find matches in list
-getAccess <- function(nd, pattern = ".nc$"){
-	  urlp <- xml2::xml_attr(nd, "urlpath")
-	  if(!is.na(urlp)){
-		dataset <- xml2::xml_attr(nd, "name")
-		if (grepl(pattern, dataset)){
-		  xd <- xml_contents(nd)
-		  xdd <- dplyr::bind_rows(lapply(xml_attrs(xd), function(x) data.frame(as.list(x), stringsAsFactors=FALSE)))
-		  xdd <- xdd[,c("name", "value")]
-		  xdd <- xdd[complete.cases(xdd),]
-		  d <- data.frame(t(xdd$value))
-		  colnames(d) <- xdd$name
-		  d <- data.frame(file_name = dataset, file_url = urlp, d)
-		  return(d)}
-	  }
-}
-
-findMetaCMIP6 <- function(dots){
+findMetaCMIP6 <- function(...){
   
   # check validity of args supplied
+  dots <- list(...)
   
   args <- names(dots)
   # args <- c("project", "activity_id", names(dots))
@@ -69,19 +54,16 @@ findMetaCMIP6 <- function(dots){
 }
 
 getURLs <- function(d) {
-
   uud <- list()
+  pb <- txtProgressBar(max=nrow(d), style = 3)
   for (i in 1:nrow(d)) {
     ds <- d[i,]
     # read XML metadata
-    ur <- unlist(ds$url)[1]
+    u <- unlist(ds$url)[1]
     stopifnot (length(u) > 0)
-    u <- try(xml2::read_html(ur), silent = TRUE) 
+    u <- try(xml2::read_html(u), silent = TRUE) 
     # if xml content is missing
-    if (inherits(u, "try-error")) {
-		if (substr(u[1], 1, 24) == "Error in open.connection") return(uud)
-		next
-	}
+    if (any(class(u) == "try-error")) next
     # get dataset nodes
     nds <- xml2::xml_find_all(u, ".//dataset")
     # find the ones with files
@@ -91,32 +73,32 @@ getURLs <- function(d) {
     # construct url for data access
     uu$file_url <- file.path("http:/",ds$data_node, "thredds/fileServer", uu$file_url)
     uud[[i]] <- data.frame(ds[rep(seq_len(nrow(ds)), each = nrow(uu)), ], uu)
+    setTxtProgressBar(pb, i) 
   }
+  close(pb)
   return(uud)
 }	
 
 
-getMetaCMIP6 <- function(qargs) {
+getMetaCMIP6 <- function(...) {
   
   # cat("Parsing page ", i, "-----------------\n"); flush.console()
   # 10000 is the maximum limit in one query
-	xdd <- try(findMetaCMIP6(qargs)) 
-	if (NROW(xdd) < 1) return( NULL )
-
-	ldd <- getURLs(xdd)
-	
-	
-	sdd <- data.table::rbindlist(ldd, fill = TRUE)
-	names(sdd)[names(sdd) == 'size.1'] <- 'file_size'
-  # are there any duplicates
-	sdd <- unique(sdd, by = "file_id")
-	ftime <- sapply(strsplit(sdd$file_name, "_"), function(x)grep(".nc", x, value = TRUE))
-	ftime <- strsplit(gsub(".nc", "", ftime), "-")
-	stime <- sapply(ftime, "[[", 1)
-	etime <- sapply(ftime, "[[", 2)
-	sdd$file_start_date <- as.Date(stime, "%Y%m%d")
-	sdd$file_end_date <- as.Date(etime, "%Y%m%d")
-	tokeep <- c("id","version", "activity_id","cf_standard_name","variable","variable_units","data_node","experiment_id", "frequency","index_node","institution_id","member_id","mip_era","file_name", "file_url",
+  xdd <- try(findMetaCMIP6(...))
+  
+  ldd <- getURLs(xdd)
+  sdd <- data.table::rbindlist(ldd, fill = TRUE)
+  names(sdd)[names(sdd) == 'size.1'] <- 'file_size'
+  # are there any repeatation
+  sdd <- unique(sdd, by = "file_id")
+  ftime <- sapply(strsplit(sdd$file_name, "_"), function(x)grep(".nc", x, value = TRUE))
+  ftime <- strsplit(gsub(".nc", "", ftime), "-")
+  stime <- sapply(ftime, "[[", 1)
+  etime <- sapply(ftime, "[[", 2)
+  sdd$file_start_date <- as.Date(stime, "%Y%m%d")
+  sdd$file_end_date <- as.Date(etime, "%Y%m%d")
+  tokeep <- c("id","version", "activity_id","cf_standard_name","variable","variable_units","data_node","experiment_id", 
+              "frequency","index_node","institution_id","member_id","mip_era","file_name", "file_url",
               "nominal_resolution","file_start_date","file_end_date","number_of_aggregations",
               "number_of_files","pid","project","source_id","source_type","sub_experiment_id", 
               "url","xlink","realm","replica","latest","geo","geo_units","grid","mod_time", "file_size" ,"checksum","checksum_type",
@@ -131,6 +113,24 @@ getMetaCMIP6 <- function(qargs) {
 # may be not honored in the search
 # d <- try(findMetaCMIP6(offset = offset, limit = limit, experiment_id = "historical"))
 
+
+
+# helper function to find matches in list
+getAccess <- function(nd, pattern = ".nc$"){
+  urlp <- xml2::xml_attr(nd, "urlpath")
+  if(!is.na(urlp)){
+    dataset <- xml2::xml_attr(nd, "name")
+    if (grepl(pattern, dataset)){
+      xd <- xml_contents(nd)
+      xdd <- bind_rows(lapply(xml_attrs(xd), function(x) data.frame(as.list(x), stringsAsFactors=FALSE)))
+      xdd <- xdd[,c("name", "value")]
+      xdd <- xdd[complete.cases(xdd),]
+      d <- data.frame(t(xdd$value))
+      colnames(d) <- xdd$name
+      d <- data.frame(file_name = dataset, file_url = urlp, d)
+      return(d)}
+  }
+}
 
 # get important parameters from uu: urlPath and dataset
 getDataCMIP6 <- function(d, downdir, silent=FALSE){
