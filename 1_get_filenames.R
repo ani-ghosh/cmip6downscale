@@ -1,7 +1,6 @@
 
 
-
-get_meta <- function(model, experiment, freq, path=".") {
+get_meta <- function(model, experiment, freq, path=".", vars=c("pr", "tasmax", "tasmin")) {
 	fname <- paste0("CMIP6_", model, "_", experiment, "_", freq, "_", substr(Sys.Date(), 1, 7), ".csv")
 	fname <- file.path(path, fname)
 	cat(fname, "\n"); flush.console()
@@ -9,7 +8,6 @@ get_meta <- function(model, experiment, freq, path=".") {
 	
 	activity_id = ifelse(experiment=="historical", "CMIP", "ScenarioMIP")
 	dh <- list()
-	vars <- c("pr", "tasmax", "tasmin")
 	for (i in 1:length(vars)){
 		qargs = list(offset = 0,
 			 	  limit = 10000,
@@ -61,14 +59,18 @@ models <- c("ACCESS-CM2","ACCESS-ESM1-5","AWI-CM-1-1-MR","AWI-ESM-1-1-LR",
 setwd("C:/github/cmip6downscale")
 source("0_CMIP6download_functions.R")
 dir.create("data", FALSE, FALSE)
-x <- list()
-for (i in 1:length(models)) {
-	cat(i, ": ")
-	R.utils::withTimeout(
-		try(x[[i]] <- get_meta(models[i], experiment="historical", freq="mon", "data")), 
-		timeout = 60
-	)
-}
 
+all <- list()
+for (exper in c(126, 245, 370, 585, "historical")) {
+	x <- list()
+	for (i in 1:length(models)) {
+		cat(i, ": ")
+		R.utils::withTimeout(
+			try(x[[i]] <- get_meta(models[i], experiment=exper, freq="mon", "data")), 
+			timeout = 60
+		)
+	}
+	all <- c(all, x)
+}
 
 

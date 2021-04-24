@@ -75,7 +75,7 @@ getURLs <- function(d) {
     ds <- d[i,]
     # read XML metadata
     ur <- unlist(ds$url)[1]
-    stopifnot (length(ur) > 0)
+    if (length(ur) == 0) return(uud)
     u <- try(xml2::read_html(ur), silent = TRUE) 
     # if xml content is missing
     if (inherits(u, "try-error")) {
@@ -86,7 +86,9 @@ getURLs <- function(d) {
     nds <- xml2::xml_find_all(u, ".//dataset")
     # find the ones with files
     uu <- lapply(nds, getAccess)
-    uu[sapply(uu, is.null)] <- NULL
+	
+    #invalid subscript type 'list'
+	#uu[sapply(uu, is.null)] <- NULL
     uu <- data.table::rbindlist(uu, fill = TRUE)
     # construct url for data access
     uu$file_url <- file.path("http:/",ds$data_node, "thredds/fileServer", uu$file_url)
@@ -105,24 +107,32 @@ getMetaCMIP6 <- function(qargs) {
 
 	ldd <- getURLs(xdd)
 	
-	
 	sdd <- data.table::rbindlist(ldd, fill = TRUE)
+	if (NROW(sdd) < 1) return( NULL )
+
 	names(sdd)[names(sdd) == 'size.1'] <- 'file_size'
   # are there any duplicates
 	sdd <- unique(sdd, by = "file_id")
-	ftime <- sapply(strsplit(sdd$file_name, "_"), function(x)grep(".nc", x, value = TRUE))
-	ftime <- strsplit(gsub(".nc", "", ftime), "-")
-	stime <- sapply(ftime, "[[", 1)
-	etime <- sapply(ftime, "[[", 2)
-	sdd$file_start_date <- as.Date(stime, "%Y%m%d")
-	sdd$file_end_date <- as.Date(etime, "%Y%m%d")
+	
+## no need for this at this point, and it creates errors 	
+	#ftime <- try(sapply(strsplit(sdd$file_name, "_"), function(x)grep(".nc", x, value = TRUE)))
+	#if (inherits(ftime, "try-error")) {
+#		print(sdd$file_name) #null?
+#	} else {
+#		ftime <- strsplit(gsub(".nc", "", ftime), "-")
+#		stime <- sapply(ftime, "[[", 1)
+#		etime <- sapply(ftime, "[[", 2)
+#		sdd$file_start_date <- as.Date(stime, "%Y%m%d")
+#		sdd$file_end_date <- as.Date(etime, "%Y%m%d")
+#	}	 
+# "file_start_date","file_end_date",
 	tokeep <- c("id","version", "activity_id","cf_standard_name","variable","variable_units","data_node","experiment_id", "frequency","index_node","institution_id","member_id","mip_era","file_name", "file_url",
-              "nominal_resolution","file_start_date","file_end_date","number_of_aggregations",
+              "nominal_resolution", "number_of_aggregations",
               "number_of_files","pid","project","source_id","source_type","sub_experiment_id", 
               "url","xlink","realm","replica","latest","geo","geo_units","grid","mod_time", "file_size" ,"checksum","checksum_type",
               "grid_label","data_specs_version","tracking_id","citation_url", "further_info_url", "retracted")
-  sdd <- sdd[, ..tokeep]
-  return(sdd)
+	sdd <- sdd[, ..tokeep]
+   return(sdd)
 }
 
 # complete list of files
