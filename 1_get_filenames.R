@@ -58,19 +58,22 @@ models <- c("ACCESS-CM2","ACCESS-ESM1-5","AWI-CM-1-1-MR","AWI-ESM-1-1-LR",
 
 setwd("C:/github/cmip6downscale")
 source("0_CMIP6download_functions.R")
-dir.create("data", FALSE, FALSE)
+ddir <- "data"
+dir.create(ddir, FALSE, FALSE)
 
 all <- list()
-for (exper in c(126, 245, 370, 585, "historical")) {
+for (exper in c("ssp126", "ssp245", "ssp370", "ssp585", "historical")) {
 	x <- list()
 	for (i in 1:length(models)) {
 		cat(i, ": ")
-		R.utils::withTimeout(
-			try(x[[i]] <- get_meta(models[i], experiment=exper, freq="mon", "data")), 
-			timeout = 60
-		)
+		try(x[[i]] <- get_meta(models[i], experiment=exper, freq="mon", ddir))
 	}
 	all <- c(all, x)
 }
 
+
+ff <- lapply(list.files(ddir, pattern="csv$", full=T), read.csv)
+x <- do.call(rbind, ff)
+
+u = unique(x[, c("source_id", "experiment_id", "variable")])
 
